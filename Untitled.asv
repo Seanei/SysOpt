@@ -5,7 +5,6 @@ K=4;
 sigma=1;
 
 H=1/sqrt(2)*(randn(M,K)+j*randn(M,K)); % random channel
-nu=10e-2;
 %%
 
 for s = 0:1:6
@@ -45,15 +44,36 @@ end
 
 Rs(s+1)=R;
 end
+
+
+%% Method 2
+nu = [1 0.1 0.01 0.001 0.0001]
 V2=V
+for n = 1:length(nu)
 for s = 1:7
-
-[R, v2]=method2(Lam(:,s), nu, V2,K, H, sigma,s)
-V2(:,:,s)= vs
-Rs2(s)=R
+ nun = nu(n)
+[R, v2]=method2(Lam(:,s), nu(n), V2(:,:,s),K, H, sigma);
+V2(:,:,s)= v2; % save matrix of v
+Rs2(s)=R;
 end
+Rsn(n,:)=Rs2;
 
+end
+%%
+figure(1)
+hold on
+plot(0:5:30,Rs,'b')
+plot(0:5:30,Rsn(1,:),'-o')
+plot(0:5:30,Rsn(2,:),'.-')
+plot(0:5:30,Rsn(3,:),'-*')
+plot(0:5:30,Rsn(4,:),'-o')
+plot(0:5:30,Rsn(5,:),'-')
 
+legend('Method1','Method2 nu=1', 'Method2 nu=10^-^1', 'Method2 nu=10^-^2', 'Method2 nu=10^-^3', 'Method2 nu=10^-^4')
+xlabel('SNR [dB]')
+ylabel('Cell sum rate')
+grid on
+hold off
 
 
 %%
@@ -63,7 +83,7 @@ plot(0:5:30,Rs2,'-r*')
 plot(0:5:30,Rs,'b')
 legend('2','1')
 hold off
-
+%%
 function lambda=bisection1(pk,H,k,A,B,M)
 
 lambda=(A+B)/2;
@@ -92,89 +112,68 @@ h = zeros(M,M);
     end
 end
   
+
+
+
 %% METHOD 2
-function [R,V2]=method2(Lam, nu, V,K, H, sigma,s);
-    mu=ones(K,K);
-    V2=V
-    lambda = Lam'
+function [R,V2]=method2(Lam, nu, V2,K, H, sigma)
+    mu=ones(K,K);% initial mu is a set of 1
+    lambda = Lam';
 for k = 1:K
 
-    
     for i = 1:4
         if i ~= k
-            A = 10e6;
-            B = 10e-6;
-            t=0
-            
+            A = 10e6;%first point for bisection
+            B = 10e-6;% second point for bisection          
             h = zeros(16,16);
-        for l = 1:4
-            if l ~= k
-                h = H(:,l)*H(:,l)' + h;
+            vk = V2(:,k);
+            if abs(H(:,i)'*vk)^2>nu%if level of side channel bigger then target level of interference... 
+               [mu_opt, vkm] = bisection2(A, B, H, lambda(k), k, i, nu, K, mu(k,:));%calling bisection method for assuming optimal vk
+                V2(:,k) = vkm;%renew v matrix
             end
         end
-            vk = V(:,k);
-            if abs(H(:,i)'*vk)^2>nu
-                
-                 lambda
-                [mu_opt, vkm] = bisection2(A, B, H, lambda(k), k, i, nu, K, mu(k,:));
-                V2(:,k) = vkm;
-                mu(k,:) = mu_opt;
-            
-            end
-        end
-
     end
-
-   
 end
     R = 0;
-    for k = 1:K
+    for k = 1:K% for each channel
             h=0;
-
-        for i = 1:4
+        for i = 1:4% calculate sum 
             if k ~=i
-
-            (abs(H(:,k)'*V2(:,i)))^2
             h= (abs(H(:,k)'*V2(:,i)))^2 + h;
             end
         end
-        
         gamma = ((abs(H(:,k)'*V2(:,k)))^2)/(h+sigma);
-        R = R + log2(1+gamma)
+        log2(1+gamma);
+        R = R + log2(1+gamma);
     end
-    R
 
 end
 
 function [mu_opt, vkm] = bisection2(A, B, H, lambda, k, j, nu, K, mu_opt)
-    h_j = H(:,j);
+    h_j = H(:,j); 
     h_k = H(:,k);
     M=size(H,1);
 
     mu_optA = mu_opt;
+    mu_optA(j) = A;% set of mu for the first point
     mu_optB = mu_opt;
-    vkm = inv(hs(K, H, mu_opt,k)+ lambda*eye(M))*h_k;
-    mu_optA(j) = A;
-    
-    
-
-    vkA = inv(hs(K, H, mu_optA,k)+ lambda*eye(M))*h_k;
-    mu_optB(j) = B;
-    vkB = inv(hs(K, H, mu_optB,k)+ lambda*eye(M))*h_k;
-
-    if err2(h_j, vkA,nu)*err2(h_j, vkB, nu)<=0
-        mu_j = (A+B)/2;
-        mu_opt(j) = mu_j;
-        vkm = inv(hs(K, H, mu_opt,k)+ lambda*eye(M))*h_k;
-        if err2(h_j, vkA, nu)*err2(h_j, vkm, nu)<0
+    mu_optB(j) = B;% set of mu for the second point
+    vkm = inv(hs(K, H, mu_opt,k)+ lambda*eye(M))*h_k;%Calculate vk for initial mu
+    vkA = inv(hs(K, H, mu_optA,k)+ lambda*eye(M))*h_k;% Calculate vk for first point mu
+    vkB = inv(hs(K, H, mu_optB,k)+ lambda*eye(M))*h_k;%Calculate vk for second point mu
+    if err2(h_j, vkA,nu)*err2(h_j, vkB, nu)<=0%if function of mu crosses zero...
+        mu_j = (A+B)/2;% middle between A and B
+        mu_opt(j) = mu_j;% set of mu for middle point
+        vkm = inv(hs(K, H, mu_opt,k)+ lambda*eye(M))*h_k;% calculate vk for middle point set of mu
+        if err2(h_j, vkA, nu)*err2(h_j, vkm, nu)<0% Condition of bisection 
             B = mu_j;
         else err2(h_j, vkA, nu)*err2(h_j, vkm, nu)>0
             A = mu_j;
         end
-        if abs(err2(h_j, vkm,nu))> 0.00001
-            [mu_opt, vkm] = bisection2(A, B, H, lambda, k, j, nu, K, mu_opt);
+        if abs(err2(h_j, vkm,nu))> 0.00001% if error bigger then 0.00001...
+            [mu_opt, vkm] = bisection2(A, B, H, lambda, k, j, nu, K, mu_opt);% call this function again
         end
-    else
+    else %if function of mu doesn't cross zero...
         error('Error')
     end
     
