@@ -5,7 +5,7 @@ K=4;
 sigma=1;
 
 H=1/sqrt(2)*(randn(M,K)+j*randn(M,K)); % random channel
-nu=10e0;
+nu=1e-4;
 %%
 
 for s = 0:1:6
@@ -27,15 +27,15 @@ for k = 1:K
     end
     h
     vk = (inv(h + lambda * eye(M)))*H(:,k);
-    V(:,k)=vk;
+    V(:,k,s+1)=vk;
     Lam(k,s+1) = lambda
 end
     for k = 1:K
-        vk = V(:,k)
+        vk = V(:,k,s+1)
         h=0;
         for i = 1:4
             if k ~=i
-            h= (abs(H(:,k)'*V(:,i)))^2 + h;
+            h= (abs(H(:,k)'*V(:,i,s+1)))^2 + h;
             end
         end
         (abs(H(:,k)'*vk))
@@ -45,10 +45,11 @@ end
 
 Rs(s+1)=R;
 end
+V2=V
 for s = 1:7
-V2=V;
 
-[R, V2]=method2(Lam(:,s), nu, V2,K, H, sigma,s)
+[R, v2]=method2(Lam(:,s), nu, V2(:,:,s),K, H, sigma,s)
+V2(:,:,s)= v2
 Rs2(s)=R
 end
 
@@ -58,7 +59,7 @@ end
 %%
 figure(1)
 hold on
-plot(0:5:30,Rs2,'r')
+plot(0:5:30,Rs2,'-r*')
 plot(0:5:30,Rs,'b')
 legend('2','1')
 hold off
@@ -92,31 +93,26 @@ h = zeros(M,M);
 end
   
 %% METHOD 2
-function [R,V2]=method2(Lam, nu, V,K, H, sigma,s);
+function [R,V2]=method2(Lam, nu, V2,K, H, sigma,s);
     mu=ones(K,K);
-    V2=V
     lambda = Lam'
 for k = 1:K
 
-    
     for i = 1:4
         if i ~= k
             A = 10e6;
-            B = 10e-6;
-            t=0
-            
+            B = 10e-6;            
             h = zeros(16,16);
         for l = 1:4
             if l ~= k
                 h = H(:,l)*H(:,l)' + h;
             end
         end
-            vk = V(:,k);
+            vk = V2(:,k);
+            abs(H(:,i)'*vk)
             if abs(H(:,i)'*vk)^2>nu
-                
-                 lambda
-                [mu_opt, vkm] = bisection2(A, B, H, lambda(k), k, i, nu, K, mu(k,:));
-                V2(:,k) = vkm;
+               [mu_opt, vkm] = bisection2(A, B, H, lambda(k), k, i, nu, K, mu(k,:));
+                V2(:,k) = vkm
                 mu(k,:) = mu_opt;
             
             end
@@ -127,21 +123,20 @@ for k = 1:K
    
 end
     R = 0;
-    h=0;
     for k = 1:K
+            h=0;
+
         for i = 1:4
             if k ~=i
 
-            (abs(H(:,k)'*V2(:,i)))^2
             h= (abs(H(:,k)'*V2(:,i)))^2 + h;
             end
         end
         
         gamma = ((abs(H(:,k)'*V2(:,k)))^2)/(h+sigma);
+        log2(1+gamma)
         R = R + log2(1+gamma)
     end
-    R
-
 
 end
 

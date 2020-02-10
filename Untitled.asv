@@ -5,7 +5,7 @@ K=4;
 sigma=1;
 
 H=1/sqrt(2)*(randn(M,K)+j*randn(M,K)); % random channel
-nu=10e-3;
+nu=10e-2;
 %%
 
 for s = 0:1:6
@@ -22,31 +22,34 @@ for k = 1:K
     for i = 1:4
         if i ~= k
             h
-            h = H(:,i)'*H(:,i)' + h;
+            h = H(:,i)*H(:,i)' + h;
         end
     end
-    
-    vk = (inv(h + lambda * eye(M)))*H(k,:)';
-    V(:,k)=vk;
+    h
+    vk = (inv(h + lambda * eye(M)))*H(:,k);
+    V(:,k,s+1)=vk;
     Lam(k,s+1) = lambda
 end
     for k = 1:K
+        vk = V(:,k,s+1)
         h=0;
         for i = 1:4
             if k ~=i
-            h= (abs(H(k,:)*V(:,i)))^2 + h;
+            h= (abs(H(:,k)'*V(:,i,s+1)))^2 + h;
             end
         end
-        gamma = ((abs(H(k,:)*vk))^2)/(h+sigma);
+        (abs(H(:,k)'*vk))
+        gamma = ((abs(H(:,k)'*vk))^2)/(h+sigma);
         R = R + log2(1+gamma);
     end
 
 Rs(s+1)=R;
 end
+V2=V
 for s = 1:7
-V2=V;
 
-[R, V2]=method2(Lam(:,s), nu, V2,K, H, sigma,s)
+[R, v2]=method2(Lam(:,s), nu, V2,K, H, sigma,s)
+V2(:,:,s)= vs
 Rs2(s)=R
 end
 
@@ -56,21 +59,21 @@ end
 %%
 figure(1)
 hold on
-plot(0:5:30,Rs2,'r')
+plot(0:5:30,Rs2,'-r*')
 plot(0:5:30,Rs,'b')
 legend('2','1')
 hold off
+
 function lambda=bisection1(pk,H,k,A,B,M)
 
 lambda=(A+B)/2;
 h = zeros(M,M);
     for i = 1:4
         if i ~= k
-            H(i,:)
+            H(:,i);
             h = H(:,i)*H(:,i)' + h;
         end
     end
-
     vkl = (inv(h + lambda * eye(M)))*H(:,k);
     vkA = (inv(h + A * eye(M)))*H(:,k);
     vkB = (inv(h + B * eye(M)))*H(:,k);
@@ -92,11 +95,11 @@ end
 %% METHOD 2
 function [R,V2]=method2(Lam, nu, V,K, H, sigma,s);
     mu=ones(K,K);
-    
+    V2=V
     lambda = Lam'
 for k = 1:K
 
-
+    
     for i = 1:4
         if i ~= k
             A = 10e6;
@@ -111,10 +114,11 @@ for k = 1:K
         end
             vk = V(:,k);
             if abs(H(:,i)'*vk)^2>nu
+                
                  lambda
-            [mu_opt, vkm] = bisection2(A, B, H, lambda(k), k, i, nu, K, mu(k,:));
-            V2(:,k) = vkm;
-            mu(k,:) = mu_opt;
+                [mu_opt, vkm] = bisection2(A, B, H, lambda(k), k, i, nu, K, mu(k,:));
+                V2(:,k) = vkm;
+                mu(k,:) = mu_opt;
             
             end
         end
@@ -123,44 +127,45 @@ for k = 1:K
 
    
 end
-    
+    R = 0;
     for k = 1:K
-        R = 0;
-        vk = V2(:,k);
-        h=0;
+            h=0;
+
         for i = 1:4
             if k ~=i
+
+            (abs(H(:,k)'*V2(:,i)))^2
             h= (abs(H(:,k)'*V2(:,i)))^2 + h;
             end
         end
-        gamma = ((abs(H(:,k)'*vk))^2)/(h+sigma);
-        R = R + log2(1+gamma);
+        
+        gamma = ((abs(H(:,k)'*V2(:,k)))^2)/(h+sigma);
+        R = R + log2(1+gamma)
     end
-
-
+    R
 
 end
 
 function [mu_opt, vkm] = bisection2(A, B, H, lambda, k, j, nu, K, mu_opt)
     h_j = H(:,j);
     h_k = H(:,k);
-    M=size(H,2);
+    M=size(H,1);
 
     mu_optA = mu_opt;
     mu_optB = mu_opt;
-    
+    vkm = inv(hs(K, H, mu_opt,k)+ lambda*eye(M))*h_k;
     mu_optA(j) = A;
     
     
 
-    vkA = inv(hs(K, H, mu_optA,k)+ lambda*eye(M))*h_k';
+    vkA = inv(hs(K, H, mu_optA,k)+ lambda*eye(M))*h_k;
     mu_optB(j) = B;
-    vkB = inv(hs(K, H, mu_optB,k)+ lambda*eye(M))*h_k';
+    vkB = inv(hs(K, H, mu_optB,k)+ lambda*eye(M))*h_k;
 
     if err2(h_j, vkA,nu)*err2(h_j, vkB, nu)<=0
         mu_j = (A+B)/2;
         mu_opt(j) = mu_j;
-        vkm = inv(hs(K, H, mu_opt,k)+ lambda*eye(M))*h_k';
+        vkm = inv(hs(K, H, mu_opt,k)+ lambda*eye(M))*h_k;
         if err2(h_j, vkA, nu)*err2(h_j, vkm, nu)<0
             B = mu_j;
         else err2(h_j, vkA, nu)*err2(h_j, vkm, nu)>0
