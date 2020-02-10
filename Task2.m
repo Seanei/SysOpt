@@ -1,73 +1,99 @@
-clc; clear; close all;
+clc;clear;close all;
+%% Initial data
 rng(1);
-M=16;
-K=4;
+M=16;  % # of antennas
+K=4;  % # of receivers
 sigma=1;
-
-H=1/sqrt(2)*(randn(M,K)+j*randn(M,K)); % random channel
-%%
-
-for s = 0:1:6
-    pk = 10^(s*5/10)/K;
-    R = 0;
+H=1/sqrt(2)*(randn(M,K)+j*randn(M,K)); % generating of random channels 
+... for K receivers with M antennas  
+nu = [1 0.1 0.01 0.001 0.0001];
+  % threshold of interference
+SNR=0:5:30;   % Signal to noise ratio
+pmax=10.^(SNR/10); 
+%% Method 1
+for s = 1:length(pmax)
+    pk = pmax(s)/K;  % power for each receiver
+    R = 0;         
 
 for k = 1:K
     
-    A= 10e6;
-    B=10e-6;
-    lambda = bisection1(pk,H,k,A,B,M);
-    
+    A= 10e6;  % First point for bisection
+    B=10e-6;  % Second point for bisection
+    lambda = bisection1(pk,H,k,A,B,M); % calc lambda via bisection method
     h = zeros(M,M);
     for i = 1:4
         if i ~= k
-            h
-            h = H(:,i)*H(:,i)' + h;
+            h = H(:,i)*H(:,i)' + h; 
         end
     end
-    h
-    vk = (inv(h + lambda * eye(M)))*H(:,k);
-    V(:,k,s+1)=vk;
-    Lam(k,s+1) = lambda
+    vk = (inv(h + lambda * eye(M)))*H(:,k); % calc beamforming vector
+    V(:,k,s)=vk; % collect beamforming vectiors
+    Lam(k,s) = lambda;  % collect coresponding lambda
 end
     for k = 1:K
-        vk = V(:,k,s+1)
+        vk = V(:,k,s); 
         h=0;
-        for i = 1:4
+        for i = 1:K
             if k ~=i
-            h= (abs(H(:,k)'*V(:,i,s+1)))^2 + h;
+            h= (abs(H(:,k)'*V(:,i,s)))^2 + h; 
             end
         end
-        (abs(H(:,k)'*vk))
-        gamma = ((abs(H(:,k)'*vk))^2)/(h+sigma);
-        R = R + log2(1+gamma);
+        gamma = ((abs(H(:,k)'*vk))^2)/(h+sigma); % calc of SINR 
+        ... at the k-th receiver
+        R = R + log2(1+gamma); % cell sum rate
     end
-
-Rs(s+1)=R;
+Rs(s)=R;
 end
-
-
-%% Method 2
-nu = [1 0.1 0.01 0.001 0.0001]
-V2=V
+V2=V;
 for n = 1:length(nu)
-for s = 1:7
+for s = 1:length(pmax)
  nun = nu(n)
-[R, v2]=method2(Lam(:,s), nu(n), V2(:,:,s),K, H, sigma);
+[R, v2]=method2(Lam(:,s), nu(n), V2(:,:,s),K, H, sigma); % calc cell 
+... sum rate and correspondig beamformers via method 2
 V2(:,:,s)= v2; % save matrix of v
 Rs2(s)=R;
 end
-Rsn(n,:)=Rs2;
-
-
-
-
-%% 
-
-
+Rsn(n,:)=Rs2; % collect cell sum rate for diff nu
 
 end
-%%
+
+%% Zero-forcing
+
+for s = 1:length(pmax)
+    pk = pmax(s)/K;  % power for each receiver
+    V_zf = pinv(H'); 
+    R=0;
+    for k = 1:K
+        vk = V_zf(:,k);
+        vk = (vk/sqrt(vk'*vk))*sqrt(pk);
+        h=0;
+        for i = 1:K
+            if k ~=i
+            h= (abs(H(:,k)'*V_zf(:,i)))^2 + h; 
+            end
+        end
+        gamma = ((abs(H(:,k)'*vk))^2)/(h+sigma); % calc of SINR 
+        ... at the k-th receiver
+        R = R + log2(1+gamma); % cell sum rate
+    end
+Rzf(s) = R;
+end
+%% Graphs for Task2 c) - i) iii) and ii)
+%i) and iii)
 figure(1)
+hold on
+plot(0:5:30,Rs2,'-r*','LineWidth',2)
+plot(0:5:30,Rs,'b','LineWidth',2)
+plot(0:5:30,Rzf,'g','LineWidth',2)
+
+legend('Method 2','Method 1','Zero - Forcing')
+xlabel('SNR [dB]')
+ylabel('Cell sum rate')
+grid on;
+hold off
+
+% ii)
+figure(2)
 hold on
 plot(0:5:30,Rs,'b')
 plot(0:5:30,Rsn(1,:),'-o')
@@ -82,46 +108,33 @@ ylabel('Cell sum rate')
 grid on
 hold off
 
-
-%%
-figure(2)
-hold on
-plot(0:5:30,Rsn(3,:),'-r*')
-plot(0:5:30,Rs,'b')
-legend('2','1')
-hold off
-%%
-function lambda=bisection1(pk,H,k,A,B,M)
-
-lambda=(A+B)/2;
-h = zeros(M,M);
+function lambda=bisection1(pk,H,k,A,B,M)   % func. for bisection algorithm
+lambda=(A+B)/2;     % choose lambda as middle of segment
+h = zeros(M,M);      
     for i = 1:4
         if i ~= k
             H(:,i);
-            h = H(:,i)*H(:,i)' + h;
+            h = H(:,i)*H(:,i)' + h; 
         end
     end
-    vkl = (inv(h + lambda * eye(M)))*H(:,k);
-    vkA = (inv(h + A * eye(M)))*H(:,k);
-    vkB = (inv(h + B * eye(M)))*H(:,k);
-    if er(B,vkB,pk).*er(A,vkA,pk)<0
-        if er(lambda,vkl,pk).*er(A,vkA,pk)<0
-            B=lambda;
-        elseif er(lambda,vkl,pk).*er(A,vkA,pk) >0
-            A=lambda;
+    vkl = (inv(h + lambda * eye(M)))*H(:,k);  % calc vk through Method 1 for lambda
+    vkA = (inv(h + A * eye(M)))*H(:,k);       % calc vk through Method 1 for A
+    vkB = (inv(h + B * eye(M)))*H(:,k);        %calc vk through Method 1 for B
+    if er(B,vkB,pk)*er(A,vkA,pk)<0  % Check the condition if f(B)*f(A) < 0
+        if er(lambda,vkl,pk)*er(A,vkA,pk)<0  % Check the condition if f(lambda)*f(A) < 0
+            B=lambda;   % shift end of segment to lambda
+        elseif er(lambda,vkl,pk)*er(A,vkA,pk) >0   % Check the condition if f(Blambda)*f(A) > 0
+            A=lambda; % shift beggin of segment to lambda
         end
-    
-        if abs(er(lambda,vkl,pk))>=0.00001
-            lambda = bisection1(pk,H,k,A,B,M);
+        if abs(er(lambda,vkl,pk))>=0.00001 % repeat the cycle body while
+    ...difference between Pmax and sum of pn bigger then 0.00001   
+            lambda = bisection1(pk,H,k,A,B,M);  
         end
     else 
         error('error')
     end
 end
   
-
-
-
 %% METHOD 2
 function [R,V2]=method2(Lam, nu, V2,K, H, sigma)
     mu=ones(K,K);% initial mu is a set of 1
@@ -196,11 +209,11 @@ for j = 1: K
 end
 end
 
-function err = er(lambda,vk, pk)
+function err = er(lambda,vk, pk) %function for calculation error method 1
 
-    err = lambda.*(vk'*vk - pk);
+    err = lambda.*(vk'*vk - pk); 
 end
 
-function err = err2(h_j,vk, nu) %function for calculation
+function err = err2(h_j,vk, nu) %function for calculation error method 2
 err = abs(h_j'*vk)^2-nu;
 end
